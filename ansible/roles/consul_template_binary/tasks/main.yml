@@ -1,0 +1,38 @@
+- name: install zip
+  apt:
+    name: zip
+  become: yes
+
+- name: check for binary
+  stat:
+    path: "{{consul_template_binary_dest}}"
+  register: consul_template_binary
+
+- name: get consul_template binary
+  get_url:
+    url: "{{consul_template_url}}"
+    dest: "/tmp/consul_template_{{consul_template_version}}_{{consul_template_platform}}.zip"
+  when: not consul_template_binary.stat.exists or consul_template_update
+
+- name: unzip consul_template
+  unarchive:
+    src: "/tmp/consul_template_{{consul_template_version}}_{{consul_template_platform}}.zip"
+    dest: /tmp
+    remote_src: yes
+  when: not consul_template_binary.stat.exists or consul_template_update
+
+- name: copy consul_template binary
+  copy:
+    src: /tmp/consul-template
+    dest: "{{consul_template_binary_dest}}"
+    mode: "+x"
+    remote_src: yes
+  when: not consul_template_binary.stat.exists or consul_template_update
+
+- name: cleanup files
+  file:
+    state: absent
+    path: "{{item}}"
+  with_items:
+    - "/tmp/consul_template_{{consul_template_version}}_{{consul_template_platform}}.zip"
+    - "/tmp/consul_template"

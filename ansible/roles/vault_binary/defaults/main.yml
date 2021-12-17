@@ -1,0 +1,4 @@
+vault_url: https://releases.hashicorp.com/vault/{{vault_version}}/vault_{{vault_version}}_{{vault_platform}}.zip
+vault_version: 1.9.0
+vault_platform: linux_amd64
+vault_update: no

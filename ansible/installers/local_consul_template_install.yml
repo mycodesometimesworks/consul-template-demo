@@ -1,0 +1,6 @@
+- name: install consul_template
+  hosts: localhost
+  vars:
+      consul_template_binary_dest: ../../consul-template
+  roles:
+    - consul_template_binary

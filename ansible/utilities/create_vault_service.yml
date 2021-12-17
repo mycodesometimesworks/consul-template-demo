@@ -1,0 +1,107 @@
+- name: deploy local consul template
+  hosts: localhost
+  vars:
+    ## Project setup
+    service_name: test
+    build_timestamp: "{{ansible_date_time.iso8601_basic_short}}"
+    project_directory: "{{playbook_dir}}/{{service_name}}"
+
+    ## Vault generic setup
+    vault_address: http://127.0.0.1:8200
+    init_vault_session_token: "{{ lookup('file', vault_token_path) }}"
+    # vault_token_path: "{{playbook_dir}}/../../../docker/vault-consul/dev/vault_keys/root-token"
+    vault_token_path: "{{playbook_dir}}/../../infra/docker/vault-consul/dev/vault_tokens/ansible-token"
+    host_vault_path: "{{playbook_dir}}/../../vault"
+
+    ## Vault role setup
+    create_vault_role: no
+    vault_role_name: "{{service_name}}"
+    vault_policy_template_filename: "basic_role.{{vault_policy_format}}.j2"
+    vault_policy_name: "{{vault_role_name}}-role"
+    vault_role_access_path: "{{vault_role_name}}"
+    vault_role_ttl: 24h
+    vault_policy_format: hcl
+    vault_templates_path: "{{playbook_dir}}/../../resources/templates/vault/policies"
+
+    ## Vault KV setup
+    create_vault_kv: no
+    secret_kv_path: "{{vault_role_name}}"
+    vault_policy_dir: "{{project_directory}}/vault_policies"
+    role_capabilities:
+      - create
+      - read
+      - delete
+      - list
+
+    ## Vault token setup
+    create_vault_token: yes
+    vault_token_name: "{{vault_role_name}}"
+
+    ## Vault secrets input
+    secret_length: 12
+    secret_requirements: ascii_letters,digits
+    vault_secret_data:
+      - secret_name: "{{service_name}}"
+        update_vault_secret: yes
+        secret_contents:
+          user_env: "{{lookup('env', 'HOME')}}"
+          build_time: "{{build_time}}-test"
+          secret: "{{lookup('password', '/dev/null '+'length=' + secret_length|string+ ' chars=' + secret_requirements ) }}"
+
+  pre_tasks:
+    - name: set static build facts
+      set_fact:
+        build_time: "{{build_timestamp}}"
+
+    - name: create session token
+      include_role:
+        name: vault
+        tasks_from: create_token
+        allow_duplicates: yes
+      when: create_vault_token
+      vars:
+        vault_token_name: ansible
+        vault_session_token: "{{init_vault_session_token}}"
+        use_app_role: no
+
+    - name: use session token
+      set_fact:
+        vault_session_token: "{{ created_vault_token.json.auth.client_token }}"
+        use_app_role: yes
+
+    - name: create application kv
+      include_role:
+        name: vault
+        tasks_from: create_kv_engine
+        allow_duplicates: yes
+      when: create_vault_kv
+
+    - name: create role
+      include_role:
+        name: vault
+        tasks_from: create_from_policy
+        allow_duplicates: yes
+      when: create_vault_role
+
+    - name: add vault secret directories to gitignore
+      lineinfile:
+        path: "{{project_directory}}/.gitignore"
+        line: "{{item}}"
+        create: yes
+      with_items:
+        - /vault_tokens
+      when: vault_tokens_dir is defined
+
+    - name: create application token
+      include_role:
+        name: vault
+        tasks_from: create_token
+        allow_duplicates: yes
+      when: create_vault_token
+
+    - name: create vault secrets
+      include_role:
+        name: vault
+        tasks_from: create_secret
+        allow_duplicates: yes
+      with_items: "{{vault_secret_data}}"

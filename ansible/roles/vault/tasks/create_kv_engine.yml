@@ -1,0 +1,15 @@
+- name: enable kv backend
+  shell: "{{host_vault_path}} secrets enable -path='{{secret_kv_path}}' kv-v2"
+  environment:
+    VAULT_ADDR: "{{vault_address}}"
+    VAULT_TOKEN: "{{vault_session_token}}"
+  register: created_vault_kv
+  failed_when:
+    - created_vault_kv.failed
+    - "'is already in use at' not in created_vault_kv.stderr"
+
+- name: show kv result
+  debug:
+    msg:
+      - "{{ created_vault_kv.stdout_lines }}"
+  when: created_vault_kv.stdout_lines is defined

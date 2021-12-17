@@ -1,0 +1,4 @@
+consul_template_url: "https://releases.hashicorp.com/consul-template/{{consul_template_version}}/consul-template_{{consul_template_version}}_{{consul_template_platform}}.zip"
+consul_template_version: 0.27.2
+consul_template_platform: linux_amd64
+consul_template_update: no

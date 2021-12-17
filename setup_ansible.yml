@@ -1,0 +1,69 @@
+---
+- hosts: localhost
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    project_directory: "{{ playbook_dir }}"
+    project_directories:
+      - ansible
+
+  tasks:
+  - name: create ansible project directory
+    file:
+      path: "{{project_directory}}"
+      state: directory
+
+  - name: create project directory
+    file:
+      path: "{{item}}"
+      state: directory
+    with_items: "{{project_directories}}"
+
+  - name: make ansible config
+    copy:
+      dest: ansible/ansible.cfg
+      content: |
+
+        [inventory]
+        # enable_plugins = yaml
+        # host_list, script, yaml, ini
+
+        [ssh_connection]
+        pipelining = True
+
+        [defaults]
+        timeout = 30
+        host_key_checking = False
+        deprecation_warnings=False
+
+
+        roles_path = ./roles
+        ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+        callback_whitelist = profile_tasks
+
+        ANSIBLE_LOCAL_TEMP=$HOME/.ansible/tmp
+        ANSIBLE_REMOTE_TEMP=$HOME/.ansible/tmp
+
+  - name: make local ansible config
+    copy:
+      dest: ansible.cfg
+      content: |
+
+        [inventory]
+        # enable_plugins = yaml
+        # host_list, script, yaml, ini
+
+        [ssh_connection]
+        pipelining = True
+
+        [defaults]
+        timeout = 30
+        host_key_checking = False
+        deprecation_warnings=False
+
+
+        roles_path = ./ansible/roles
+        ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+        callback_whitelist = profile_tasks
+
+        ANSIBLE_LOCAL_TEMP=$HOME/.ansible/tmp
+        ANSIBLE_REMOTE_TEMP=$HOME/.ansible/tmp

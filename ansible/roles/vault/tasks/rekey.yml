@@ -1,0 +1,27 @@
+- name: make vault rekey directory
+  file:
+    state: directory
+    path: "{{unseal_files_directory}}"
+
+- name: Rekey Vault operator
+  shell: "{{host_vault_path}} operator rekey -init -key-shares=5 -key-threshold=3 -format json"
+  environment:
+    VAULT_ADDR: "{{vault_address}}"
+  register: vault_rekey_results
+
+- name: Parse output of vault rekey
+  set_fact:
+    vault_rekey_parsed: "{{ vault_rekey_results.stdout | from_json }}"
+
+- name: Write reseal keys to files
+  copy:
+    dest: "{{ unseal_files_directory }}/unseal_key_{{ item.0 }}"
+    content: "{{ item.1 }}"
+  with_indexed_items: "{{ vault_rekey_parsed.unseal_keys_hex }}"
+  delegate_to: localhost
+
+- name: Write new root token to file
+  copy:
+    content: "{{ vault_rekey_parsed.root_token }}"
+    dest: "{{unseal_files_directory}}/root-token"
+  delegate_to: localhost

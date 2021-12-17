@@ -1,0 +1,15 @@
+- name: enable approle backend
+  shell: "{{host_vault_path}} auth enable -path='{{approle_path}}'"
+  environment:
+    VAULT_ADDR: "{{vault_address}}"
+    VAULT_TOKEN: "{{vault_session_token}}"
+  register: created_vault_approle
+  failed_when:
+    - created_vault_approle.failed
+    - "'is already in use at' not in created_vault_approle.stderr"  
+
+- name: show approle result
+  debug:
+    msg:
+      - "{{ created_vault_approle.stdout_lines }}"
+  when: created_vault_approle.stdout_lines is defined

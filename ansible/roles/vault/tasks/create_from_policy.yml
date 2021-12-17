@@ -1,0 +1,17 @@
+- name: make vault policy directory
+  file:
+    state: directory
+    path: "{{vault_policy_dir}}"
+  when: vault_policy_dir is defined
+
+- name: write policy
+  template:
+    src: "{{vault_templates_path}}/{{vault_policy_template_filename}}"
+    dest: "{{vault_policy_dir}}/{{vault_policy_name}}.{{vault_policy_format}}"
+
+- name: create policy
+  shell: "{{host_vault_path}} policy write {{vault_policy_name}} {{vault_policy_dir}}/{{vault_policy_name}}.{{vault_policy_format}}"
+  environment:
+    VAULT_ADDR: "{{vault_address}}"
+    VAULT_TOKEN: "{{vault_session_token}}"
+  register: created_vault_policy

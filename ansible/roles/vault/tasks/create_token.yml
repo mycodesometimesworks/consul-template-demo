@@ -1,0 +1,55 @@
+- name: make vault token directory
+  file:
+    state: directory
+    path: "{{vault_tokens_dir}}"
+  when: vault_tokens_dir is defined
+  
+- name: create default token
+  uri:
+    url: "{{vault_address}}/v1/auth/token/create"
+    method: POST
+    body_format: json
+    headers:
+      X-Vault-Token: "{{vault_session_token}}"
+    body:
+      display_name: "{{vault_token_name}}"
+      ttl: 24h
+  register: created_vault_child_token
+  when: not use_app_role
+
+- name: create app token
+  uri:
+    url: "{{vault_address}}/v1/auth/token/create"
+    method: POST
+    body_format: json
+    headers:
+      X-Vault-Token: "{{vault_session_token}}"
+    body:
+      display_name: "{{vault_token_name}}"
+      role_name: "{{vault_token_name}}"
+      ttl: "{{vault_role_ttl|default('24h')}}"
+      policies: "{{vault_policy_name}}"
+  register: created_vault_app_token
+  when: use_app_role
+
+- name: set vault child token
+  set_fact:
+    created_vault_token: "{{ created_vault_child_token }}"
+  when:
+    - created_vault_child_token is defined
+    - not created_vault_child_token.skipped is defined
+
+- name: set vault app token
+  set_fact:
+    created_vault_token: "{{ created_vault_app_token }}"
+  when:
+    - created_vault_app_token is defined
+    - not created_vault_app_token.skipped is defined
+
+- name: Write token to file
+  copy:
+    dest: "{{ vault_tokens_dir }}/{{vault_token_name}}-token"
+    content: "{{ created_vault_token.json.auth.client_token }}"
+  when:
+    - vault_tokens_dir is defined
+    - created_vault_token.json.auth.client_token is defined

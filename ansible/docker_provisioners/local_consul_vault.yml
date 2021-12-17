@@ -1,0 +1,369 @@
+- name: do things to a local docker container
+  hosts: localhost
+  vars:
+
+    ## Project setup
+    service_name: vault-consul
+    service_subdirectory: dev
+    build_timestamp: "{{ansible_date_time.iso8601_basic_short}}"
+    project_directory: "{{playbook_dir}}/../../infra/docker/{{service_name}}/{{service_subdirectory}}/"
+    # {{build_time}}"
+    host_directories:
+      - "{{project_directory}}"
+      # - "{{project_directory}}/config"
+      # - "{{project_directory}}/data"
+
+    ## Generic docker settings
+    docker_install: no
+    docker_become: no
+    docker_project_status: present
+    # docker_project_status: absent
+    docker_build: yes
+    docker_rebuild: always
+    # docker_rebuild: smart
+    docker_overwrite: yes
+    # docker_overwrite: no
+    local_files_remove: "{{docker_overwrite}}"
+
+    ## Docker project settings
+    docker_container_name: "{{service_name}}"
+    docker_base_image: hashicorp/consul:1.10.4
+    service_host: localhost
+    service_port: 8200
+    docker_services_definition:
+      consul-1:
+        container_name: "{{docker_container_name}}-1"
+        image: "{{docker_base_image}}"
+        restart: "unless-stopped"
+        ports:
+          - '127.0.0.1:8500:8500'
+          - '127.0.0.1:8600:8600/tcp'
+          - '127.0.0.1:8600:8600/udp'
+        # networks:
+        #   - "{{service_name}}"
+        # volumes:
+          # - "{{project_directory}}/config:/consul/config"
+          # - "{{project_directory}}/data/:/data"
+        command: "agent -server -ui -bind 0.0.0.0 -client 0.0.0.0 -bootstrap-expect=3 -retry-join {{docker_container_name}}-1 -retry-join {{docker_container_name}}-2 -retry-join {{docker_container_name}}-3"
+          # -data-dir=/data
+      consul-2:
+        container_name: "{{docker_container_name}}-2"
+        image: "{{docker_base_image}}"
+        restart: "unless-stopped"
+        # networks:
+        #   - "{{service_name}}"
+        # volumes:
+          # - "{{project_directory}}/config:/consul/config"
+          # - "{{project_directory}}/data/:/data"
+        command: "agent -server -bootstrap-expect=3 -retry-join {{docker_container_name}}-1 -retry-join {{docker_container_name}}-3"
+      consul-3:
+        container_name: "{{docker_container_name}}-3"
+        image: "{{docker_base_image}}"
+        restart: "unless-stopped"
+        # networks:
+        #   - "{{service_name}}"
+        # volumes:
+          # - "{{project_directory}}/config:/consul/config"
+          # - "{{project_directory}}/data/:/data"
+        command: "agent -server -bootstrap-expect=3 -retry-join {{docker_container_name}}-2 -retry-join {{docker_container_name}}-1"
+      vault:
+        image: vault:1.8.3
+        container_name: vault
+        ports:
+          - 8200:8200
+        environment:
+          - VAULT_ADDR=http://127.0.0.1:8200
+          - VAULT_LOCAL_CONFIG={"backend":{"consul":{"address":"http://{{docker_container_name}}-1:8500","path":"vault/"}},"listener":{"tcp":{"address":"0.0.0.0:8200","tls_disable":1}},"ui":true, "disable_mlock":true}
+        command: server
+        depends_on:
+          - consul-1
+
+    ## Dockerfile options
+    # dockerfile_path: "{{project_directory}}"
+    # dockerfile_filename: "dockerfile"
+    # docker_recreate: yes
+    # dockerfile_defintion: |
+    #   FROM {{docker_base_image}}
+    #   ENV DEBIAN_FRONTEND=noninteractive
+    #   RUN apt-get update && \
+    #     apt-get install -y sudo systemd && \
+    #     apt-get install -y python-dev && \
+    #     apt-get install -y python3-pip && \
+    #     pip3 install --upgrade pip && \
+    #     pip3 install --upgrade virtualenv && \
+    #     pip3 install ansible
+
+    ## Ansible settings
+    ansible_python_interpreter: /usr/bin/python3
+    inventory_path: "{{project_directory}}"
+    inventory_filename: "{{service_name}}_docker"
+    use_ansible_inventory: no
+
+  # roles:
+    # - role: docker
+    #   when: docker_setup
+  pre_tasks:
+    - name: set static build facts
+      set_fact:
+        build_time: "{{build_timestamp}}"
+
+    - name: remove directories
+      file:
+        path: "{{item}}"
+        state: absent
+      with_items:
+        - "{{host_directories}}"
+      when: local_files_remove
+      # become: "{{docker_become}}"
+      become: yes
+
+    - name: make directories
+      file:
+        path: "{{item}}"
+        state: directory
+        # owner: 100
+        # group: 1000
+      with_items:
+        - "{{host_directories}}"
+      when:
+        - "docker_project_status == 'present'"
+      become: "{{docker_become}}"
+  tasks:
+    - name: create dockerfile
+      copy:
+        content: "{{dockerfile_defintion}}"
+        dest: "{{dockerfile_path}}/{{dockerfile_filename}}"
+      when: dockerfile_defintion is defined
+
+    - name: build docker image from dockerfile
+      docker_image:
+        name: "{{docker_image_name}}"
+        build:
+          path: "{{dockerfile_path}}/"
+      become: "{{docker_become}}"
+      when: dockerfile_defintion is defined
+
+    - name: run docker container from dockerfile
+      docker_container:
+        name: "{{docker_container_name}}"
+        image: "{{docker_image_name}}"
+        exposed_ports: "{{docker_ports}}"
+        recreate: "{{docker_recreate}}"
+      become: "{{docker_become}}"
+      when: dockerfile_defintion is defined
+      become: "{{docker_become}}"
+
+    - name: build docker project from local docker compose definition
+      docker_compose:
+        project_name: "{{service_name}}"
+        build: "{{docker_build}}"
+        state: "{{docker_project_status}}"
+        recreate: "{{docker_rebuild}}"
+        definition:
+          version: '2'
+          services:
+            "{{docker_services_definition}}"
+      register: output
+      become: "{{docker_become}}"
+      when:
+        - docker_services_definition is defined
+        - docker_build
+
+    - name: Wait for interface to come up
+      uri:
+        url: "http://{{service_host}}:{{service_port|default('80')}}"
+        timeout: 60
+      register: service_web_status
+      retries: 300
+      delay: 1
+      until: service_web_status.status == 200
+      when:
+        - service_host is defined
+        - "docker_project_status == 'present'"
+
+    - name: check for inventory file
+      stat:
+        path: "{{inventory_path}}/{{inventory_filename}}.ini"
+      register: inventory_file
+      when:
+        - use_ansible_inventory
+        - "docker_project_status == 'present'"
+      become: "{{docker_become}}"
+
+    - name: create ansible inventory file for docker connection
+      file:
+        path: "{{inventory_path}}/{{inventory_filename}}.ini"
+        state: touch
+      when:
+        - use_ansible_inventory
+        - "docker_project_status == 'present'"
+        - not inventory_file.stat.exists
+      become: "{{docker_become}}"
+
+    - name: update inventory for docker container
+      lineinfile:
+        path: "{{inventory_path}}/{{inventory_filename}}.ini"
+        line: "{{docker_container_name}} ansible_connection=docker"
+        regexp:  "{{docker_container_name}}"
+        create: yes
+      delegate_to: localhost
+      when:
+        - "docker_project_status == 'present'"
+      become: "{{docker_become}}"
+
+    - name: show service host
+      debug:
+        msg:
+          - "http://{{service_host}}:{{service_port}}"
+
+    - name: add vault to inventory
+      add_host:
+        name: vault
+        ansible_connection: docker
+      when:
+        - use_ansible_inventory
+
+  post_tasks:
+    - name: set build vars
+      set_fact:
+        project_directory: "{{project_directory}}"
+        build_time: "{{build_time}}"
+        service_name: "{{service_name}}"
+        project_directory: "{{project_directory}}"
+      delegate_to: localhost
+
+- name: init vault
+  hosts: localhost
+  vars:
+    ## inherit build vars
+    build_time: "{{hostvars['localhost'].build_time}}"
+    service_name: "{{hostvars['localhost'].service_name}}"
+    project_directory: "{{hostvars['localhost'].project_directory}}"
+    create_vault_role: yes
+
+    ## Vault setup
+    vault_init: yes
+    vault_rekey: no
+    vault_unseal: no
+    unseal_files_directory: "{{project_directory}}/vault_keys"
+
+    ## Vault generic setup
+    vault_address: http://127.0.0.1:8200
+    init_vault_session_token: "{{ lookup('file', vault_token_path) }}"
+    vault_token_path: "{{project_directory}}/vault_keys/root-token"
+    host_vault_path: "{{playbook_dir}}/../../vault"
+
+    ## Vault role setup
+    vault_role_name: "{{service_name}}"
+    vault_policy_template_filename: "basic_role.{{vault_policy_format}}.j2"
+    vault_policy_name: "{{vault_role_name}}-role"
+    vault_role_access_path: "{{vault_role_name}}"
+    vault_role_ttl: 24h
+    vault_policy_format: hcl
+    vault_templates_path: "{{playbook_dir}}/../../resources/templates/vault/policies"
+
+    ## Vault KV setup
+    create_vault_kv: "{{create_vault_role}}"
+    secret_kv_path: "{{vault_role_name}}"
+    vault_policy_dir: "{{project_directory}}/vault_policies"
+    role_capabilities:
+      - create
+      - read
+      - delete
+      - list
+
+    ## Vault token setup
+    create_vault_token: "{{create_vault_role}}"
+    vault_token_name: "{{vault_role_name}}"
+    vault_tokens_dir: "{{project_directory}}/vault_tokens"
+    # vault_session_token: "{{ lookup('file', unseal_files_directory+'/root_token') }}"
+
+    ## Vault secrets input
+    secret_length: 12
+    secret_requirements: ascii_letters,digits
+    vault_secret_data:
+      - secret_name: "{{service_name}}"
+        update_vault_secret: "{{create_vault_role}}"
+        secret_contents:
+          user_env: "{{lookup('env', 'HOME')}}"
+          build_time: "{{build_time}}"
+          secret: "{{lookup('password', '/dev/null '+'length=' + secret_length|string+ ' chars=' + secret_requirements ) }}"
+  tasks:
+  - name: init vault
+    import_role:
+      name: vault
+      tasks_from: init
+    when: vault_init
+
+  - name: rekey vault
+    import_role:
+      name: vault
+      tasks_from: rekey
+    when: vault_rekey
+
+  - name: add vault secret directories to gitignore
+    lineinfile:
+      path: "{{project_directory}}/.gitignore"
+      line: "{{item}}"
+      create: yes
+    with_items:
+      - /vault_keys
+      - /vault_tokens
+    when: vault_tokens_dir is defined
+
+  - name: unseal vault
+    import_role:
+      name: vault
+      tasks_from: unseal
+    when: vault_unseal or vault_init or vault_rekey
+
+  - name: create session token
+    include_role:
+      name: vault
+      tasks_from: create_token
+      allow_duplicates: yes
+    when: create_vault_token
+    vars:
+      vault_token_name: ansible
+      vault_session_token: "{{init_vault_session_token}}"
+      use_app_role: no
+
+  - name: use session token
+    set_fact:
+      vault_session_token: "{{ created_vault_token.json.auth.client_token }}"
+      use_app_role: yes
+    when: created_vault_token is defined
+
+  - name: create application kv
+    include_role:
+      name: vault
+      tasks_from: create_kv_engine
+      allow_duplicates: yes
+    when: create_vault_kv
+
+  - name: create role
+    import_role:
+      name: vault
+      tasks_from: create_from_policy
+      allow_duplicates: yes
+    when: create_vault_token
+
+  - name: create application token
+    include_role:
+      name: vault
+      tasks_from: create_token
+      allow_duplicates: yes
+    when: create_vault_token
+
+  - name: create vault secret
+    include_role:
+      name: vault
+      tasks_from: create_secret
+      allow_duplicates: yes
+    when: item.update_vault_secret
+    with_items: "{{vault_secret_data}}"
+    # vars:
+      # use_app_role: yes
+      # vault_token_name: "{{vault_app_name}}"
+    # vars:
+      # vault_session_token: "{{init_vault_session_token}}"

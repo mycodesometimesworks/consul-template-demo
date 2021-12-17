@@ -1,0 +1,14 @@
+- name: read unseal keys
+  find:
+    paths: "{{unseal_files_directory}}"
+    file_type: file
+    patterns: 'unseal_key*'
+  register: unseal_keys
+
+- name: Unseal vault with unseal keys
+  shell:
+    cmd: "{{host_vault_path}} operator unseal {{ lookup('file', item.path ) }}"
+  environment:
+    VAULT_ADDR: "{{vault_address}}"
+  with_items: "{{unseal_keys.files}}"
+  delegate_to: localhost

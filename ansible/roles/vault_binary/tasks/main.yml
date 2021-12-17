@@ -1,0 +1,38 @@
+- name: install zip
+  apt:
+    name: zip
+  become: yes
+
+- name: check for binary
+  stat:
+    path: "{{vault_binary_dest}}"
+  register: vault_binary
+
+- name: get vault binary
+  get_url:
+    url: "{{vault_url}}"
+    dest: "/tmp/vault_{{vault_version}}_{{vault_platform}}.zip"    
+  when: not vault_binary.stat.exists or vault_update
+
+- name: unzip vault
+  unarchive:
+    src: "/tmp/vault_{{vault_version}}_{{vault_platform}}.zip"
+    dest: /tmp
+    remote_src: yes
+  when: not vault_binary.stat.exists or vault_update
+
+- name: copy vault binary
+  copy:
+    src: /tmp/vault
+    dest: "{{vault_binary_dest}}"
+    mode: "+x"
+    remote_src: yes
+  when: not vault_binary.stat.exists or vault_update
+
+- name: cleanup files
+  file:
+    state: absent
+    path: "{{item}}"
+  with_items:
+    - "/tmp/vault_{{vault_version}}_{{vault_platform}}.zip"
+    - "/tmp/vault"

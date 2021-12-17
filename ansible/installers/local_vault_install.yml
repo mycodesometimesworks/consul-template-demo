@@ -1,0 +1,6 @@
+- name: install vault
+  hosts: localhost
+  vars:
+      vault_binary_dest: ../../vault
+  roles:
+    - vault_binary
