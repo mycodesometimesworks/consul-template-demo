@@ -1,7 +1,7 @@
 ---
 - hosts: localhost
   vars:
-    ansible_python_interpreter: /usr/bin/python3
+    # ansible_python_interpreter: /usr/bin/python3
     project_directory: "{{ playbook_dir }}"
     project_directories:
       - ansible
@@ -10,15 +10,21 @@
     # project_packages:
       # - python3-apt
       # - python3-docker
-    update_python_packages: no
-    # python_packages:
-    #   - ansible~=2.0
-    #   - pip
-    #   - hvac
+    update_python_packages: yes
+    python_packages:
+      # - ansible~=2.0
+      - pip
+      - hvac
     #   - ansible-modules-hashivault==4.5.4
-    #   - jmespath
-    #   # - docker
-    # virtualenv_path: "{{project_directory}}/venv"
+      - jmespath
+      # - docker # https://stackoverflow.com/questions/50151210/ansible-unable-to-run-docker-compose-in-an-ansible-playbook
+      - docker-compose
+      - requests
+    virtualenv_path: "{{project_directory}}/venv"
+    host_architecture: darwin_amd64
+    vault_binary_dest: "{{playbook_dir}}/vault"
+    consul_template_binary_dest: "{{playbook_dir}}/consul-template"
+
     git_commit: no
     git_commit_path: '.'
     git_message: 'pushed by ansible'
@@ -69,7 +75,7 @@
       line: "{{item}}"
       create: yes
     with_items:
-      - ./venv/*
+      - /venv/*
 
   - name: set python interpreter
     set_fact:
@@ -94,6 +100,14 @@
       mode: "0755"
     when:
       - project_requirements.stat.exists or python_packages is defined
+
+  - name: add start script to gitignore
+    lineinfile:
+      path: .gitignore
+      line: "{{item}}"
+      create: yes
+    with_items:
+      - "/{{ project_directory }}/start.sh"
 
   - name: check for git directory
     stat:
@@ -149,8 +163,14 @@
       line: "{{item}}"
       create: yes
     with_items:
-      - ./vault
-      - ./consul-template
+      - /vault
+      - /consul-template
 
-- import_playbook: ansible/installers/local_vault_install.yml
-- import_playbook: ansible/installers/local_consul_template_install.yml
+  roles:
+    - name: vault_binary
+      vars:
+        vault_platform: "{{host_architecture}}"
+
+    - name: consul_template_binary
+      vars:
+        consul_template_platform: "{{host_architecture}}"

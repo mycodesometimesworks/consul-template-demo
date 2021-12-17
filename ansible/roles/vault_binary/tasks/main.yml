@@ -1,7 +1,7 @@
-- name: install zip
-  apt:
-    name: zip
-  become: yes
+# - name: install zip
+#   apt:
+#     name: zip
+#   become: yes
 
 - name: check for binary
   stat:
@@ -11,7 +11,7 @@
 - name: get vault binary
   get_url:
     url: "{{vault_url}}"
-    dest: "/tmp/vault_{{vault_version}}_{{vault_platform}}.zip"    
+    dest: "/tmp/vault_{{vault_version}}_{{vault_platform}}.zip"
   when: not vault_binary.stat.exists or vault_update
 
 - name: unzip vault

@@ -1,6 +1,7 @@
 - name: do things to a local docker container
   hosts: localhost
   vars:
+    ansible_python_interpreter: "{{playbook_dir}}/../../venv/bin/python3"
 
     ## Project setup
     service_name: vault-consul
@@ -94,7 +95,6 @@
     #     pip3 install ansible
 
     ## Ansible settings
-    ansible_python_interpreter: /usr/bin/python3
     inventory_path: "{{project_directory}}"
     inventory_filename: "{{service_name}}_docker"
     use_ansible_inventory: no
@@ -115,7 +115,7 @@
         - "{{host_directories}}"
       when: local_files_remove
       # become: "{{docker_become}}"
-      become: yes
+      # become: yes
 
     - name: make directories
       file:

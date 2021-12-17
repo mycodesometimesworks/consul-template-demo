@@ -1,12 +1,16 @@
-- name: install zip
-  apt:
-    name: zip
-  become: yes
+# - name: install zip
+#   apt:
+#     name: zip
+#   become: yes
 
 - name: check for binary
   stat:
     path: "{{consul_template_binary_dest}}"
   register: consul_template_binary
+
+- name: show consul template url
+  debug:
+    msg: "{{consul_template_url}}"
 
 - name: get consul_template binary
   get_url:

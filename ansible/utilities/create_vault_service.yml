@@ -45,7 +45,7 @@
         update_vault_secret: yes
         secret_contents:
           user_env: "{{lookup('env', 'HOME')}}"
-          build_time: "{{build_time}}-test"
+          build_time: "{{build_time}}-whatever"
           secret: "{{lookup('password', '/dev/null '+'length=' + secret_length|string+ ' chars=' + secret_requirements ) }}"
 
   pre_tasks:
